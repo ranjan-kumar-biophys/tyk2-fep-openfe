@@ -1,0 +1,14 @@
+# Project 2: relative binding free energies (alchemical FEP) with OpenFE + OpenMM.
+name: tyk2-fep
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.12
+  - openfe>=1.13      # unpinned, the solver trades it down to 0.3 for the newest ambertools
+  - ambertools        # AM1-BCC partial charges
+  - cinnabar          # MLE estimate of absolute ΔG from the ΔΔG network
+  - pandas
+  - matplotlib
+  - scipy
+  - pyyaml

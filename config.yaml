@@ -1,0 +1,18 @@
+# Project 2 settings: relative binding free energies (OpenFE RelativeHybridTopologyProtocol).
+# Same 13 TYK2 ligands, protein and experimental Ki as Project 1 (tyk2-docking-md-mmgbsa).
+
+temperature_K: 298.15
+network: redundant      # mst = n-1 edges, no cycles; redundant = union of 2 MSTs, gives cycle-closure checks
+mapper: lomap           # lomap | kartograf
+
+# OpenFE defaults are 3 repeats x 11 windows x (1 ns equil + 5 ns prod). These cut the cost
+# ~7x so the whole network fits in about a day on two GPUs; raise them for production work.
+protocol:
+  repeats: 1
+  lambda_windows: 11
+  equilibration_ns: 0.5
+  production_ns: 2.0
+
+charges:
+  method: am1bcc
+  processors: 4

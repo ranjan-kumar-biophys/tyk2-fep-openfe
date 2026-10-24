@@ -1,0 +1,41 @@
+#!/bin/bash
+#PBS -N tyk2_fep
+#PBS -q gpuq
+#PBS -l select=1:ncpus=48:ngpus=2:host=gpu02
+#PBS -l place=excl
+#PBS -l walltime=48:00:00
+#PBS -j oe
+#PBS -o fep.out
+# Project 2 on gpu02 (2x L40S): all transformations through two long-lived workers (one per
+# GPU, importing OpenFE once each), long complex legs first, then gather + analysis.
+# Finished legs are skipped, so the job can simply be resubmitted after a failure.
+cd $PBS_O_WORKDIR
+unset OMP_NUM_THREADS   # PBS sets it to ncpus
+source ~/miniforge3/etc/profile.d/conda.sh
+conda activate $PWD/env
+rm -f DONE FAILED TASK_FAILED tasks.txt.claimed preflight_tasks.txt.claimed
+fail() { echo "FAILED at $1 $(date)" > FAILED; exit 1; }
+stamp() { echo "$(date '+%F %T') $*"; }
+mkdir -p logs
+
+stamp "preflight: tiny solvent leg on GPU 0, must run on CUDA"
+ls -d $PWD/work/network_smoke/transformations/*.json > preflight_tasks.txt
+CUDA_VISIBLE_DEVICES=0 python scripts/02_run_worker.py preflight_tasks.txt \
+  --out work/preflight --runs work/preflight_runs > logs/preflight.log 2>&1
+# OpenFE logs nothing when it gets CUDA; it only warns "Non-CUDA platform selected: ..." on fallback
+{ [ ! -e TASK_FAILED ] && ls work/preflight/*.json > /dev/null 2>&1 \
+  && ! grep -q "Non-CUDA platform selected" logs/preflight.log; } \
+  || fail "preflight: run failed or OpenMM fell back from CUDA (see logs/preflight.log)"
+rm -rf work/preflight work/preflight_runs preflight_tasks.txt*
+
+ls -d $PWD/work/network/transformations/*_complex_*.json > tasks.txt
+ls -d $PWD/work/network/transformations/*_solvent_*.json >> tasks.txt
+stamp "FEP: $(wc -l < tasks.txt) transformations, one worker per GPU"
+CUDA_VISIBLE_DEVICES=0 python scripts/02_run_worker.py tasks.txt > logs/worker0.log 2>&1 &
+CUDA_VISIBLE_DEVICES=1 python scripts/02_run_worker.py tasks.txt > logs/worker1.log 2>&1 &
+wait
+[ -e TASK_FAILED ] && stamp "some legs failed (see TASK_FAILED); analysing the rest"
+
+python scripts/03_analyse.py > logs/analyse.log 2>&1 || fail "analysis (see logs/analyse.log)"
+stamp "done"
+echo "PIPELINE_DONE $(date)" > DONE
